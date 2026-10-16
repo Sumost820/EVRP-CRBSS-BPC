@@ -1,0 +1,9 @@
+StringID Type x y demand ReadyTime DueDate ServiceTime
+D0 d 0 0 0 0 100 0
+C1 c 0 0 1 0 100 0
+
+Q Vehicle fuel tank capacity /10/
+C Vehicle load capacity /100/
+r fuel consumption rate /1/
+g inverse refueling rate /1/
+v average velocity /1/

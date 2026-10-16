@@ -1,0 +1,12 @@
+BasedOnStyle: Microsoft
+IndentWidth: 4
+AccessModifierOffset: -4
+ContinuationIndentWidth: 4
+AlignAfterOpenBracket: DontAlign
+ColumnLimit: 110
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+SortIncludes: Never
+PointerAlignment: Left
