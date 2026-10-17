@@ -8,7 +8,7 @@ int main(int argc, char* argv[]) {
     SetConsoleOutputCP(CP_UTF8);
 
     // Run directly in CLion: change these two settings as needed.
-    std::string instancePath = std::string(PROJECT_DIR) + "/data/c101_21_25.txt";
+    std::string instancePath = std::string(PROJECT_DIR) + "/data/c103_21_25.txt";
     double timeLimit = 3600;
 
     // Batch tests supply: instancePath [timeLimit] [outputDir].

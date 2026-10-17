@@ -17,7 +17,8 @@
 安装 `requirements.txt` 中的 pytest，在项目目录运行：
 
 ```text
-python -m pytest -s test.py
+python -m pytest -s -v test.py
+python -m pytest -s -v test.py -k c101
 ```
 
 `test.py` 只有一个参数化函数 `testModel`，按顺序运行 `data` 下的所有 txt 文件。直接修改文件顶部的 `dataDir`、`exePath`、`timeLimit` 即可。默认可执行文件位于 `cmake-build-release-visual-studio/bin/EVRP-CRBSS.exe`；如果 CLion 使用其他构建目录，需要同步修改 `exePath`。

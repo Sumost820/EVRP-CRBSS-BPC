@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
 
 if(NOT MSVC)
     message(FATAL_ERROR "Select the Visual Studio toolchain in CLion; the supplied Gurobi libraries require MSVC.")

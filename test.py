@@ -9,7 +9,7 @@ projectDir = Path(__file__).resolve().parent
 dataDir = projectDir / "data"
 resultDir = projectDir / "results"
 exePath = projectDir / "cmake-build-release-visual-studio" / "bin" / "EVRP-CRBSS.exe"
-timeLimit = 60
+timeLimit = 300
 instancePaths = sorted(dataDir.glob("*.txt"))
 
 
