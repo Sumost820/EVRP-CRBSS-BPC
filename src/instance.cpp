@@ -9,7 +9,10 @@
 #include <map>
 #include <string>
 
-Instance::Instance(const std::string& dataFile) {
+Instance::Instance(const std::string& dataFile, int chargersPerStation)
+    : chargersPerStation(chargersPerStation) {
+    if (chargersPerStation < 1)
+        throw std::invalid_argument("chargersPerStation must be a positive integer");
     readData(dataFile);
     preprocessArcs();
     initializeNgMasks();

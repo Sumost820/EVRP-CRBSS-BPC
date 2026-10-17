@@ -9,16 +9,17 @@ projectDir = Path(__file__).resolve().parent
 dataDir = projectDir / "data"
 resultDir = projectDir / "results"
 exePath = projectDir / "cmake-build-release-visual-studio" / "bin" / "EVRP-CRBSS.exe"
-timeLimit = 300
+timeLimit = 10
+chargersPerStation = 1
 instancePaths = sorted(dataDir.glob("*.txt"))
 
 
 @pytest.mark.parametrize("instancePath", instancePaths, ids=[path.stem for path in instancePaths])
 def testModel(instancePath):
     assert exePath.is_file(), f"请先编译项目，或修改 exePath：{exePath}"
-    outputDir = resultDir / instancePath.stem
+    outputDir = resultDir / f"chargers_{chargersPerStation}" / instancePath.stem
     process = subprocess.run(
-        [str(exePath), str(instancePath), str(timeLimit), str(outputDir)],
+        [str(exePath), str(instancePath), str(timeLimit), str(outputDir), str(chargersPerStation)],
         cwd=projectDir,
         timeout=timeLimit + 60,
     )
@@ -26,4 +27,5 @@ def testModel(instancePath):
     with (outputDir / "result.csv").open(encoding="utf-8", newline="") as file:
         result = next(csv.DictReader(file))
     assert result["hasSolution"] == "1", "未找到通过全局调度检查的可行解"
+    assert int(result["chargersPerStation"]) == chargersPerStation
     assert (outputDir / "routes.csv").is_file(), "缺少最终路线"

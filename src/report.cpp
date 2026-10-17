@@ -11,6 +11,7 @@
 void Solver::printSummary() {
     std::cout << "\n========================================\n";
     std::cout << "Optimization Finished / Stopped!\n";
+    std::cout << "Equipment per station: 1 swap device, " << instance.chargersPerStation << " chargers\n";
 
     std::cout << "Final Best Obj (Upper Bound): ";
     if (upperBound < INFINITY) {
@@ -60,12 +61,12 @@ void Solver::printSummary() {
 }
 
 void Solver::printRouteDetails(const Route& route, const std::vector<ScheduledVisit>& visits) {
-    const std::string separator(96, '-');
+    const std::string separator(106, '-');
     std::cout << separator << "\n";
     std::cout << std::left << std::setw(19) << "node" << std::right << std::setw(9) << "arr_time"
               << std::setw(12) << "wait_time" << std::setw(12) << "ser_start" << std::setw(12) << "ser_time"
               << std::setw(12) << "dep_time" << std::setw(10) << "arr_SOC" << std::setw(10) << "dep_SOC"
-              << "\n";
+              << std::setw(10) << "charger" << "\n";
     std::cout << separator << "\n";
 
     for (size_t i = 0; i < visits.size(); ++i) {
@@ -96,7 +97,8 @@ void Solver::printRouteDetails(const Route& route, const std::vector<ScheduledVi
                   << waitTime << std::setw(12) << std::max(0.0, visit.startTime) << std::setw(12)
                   << serviceTime << std::setw(12) << std::max(0.0, visit.departureTime) << std::setw(10)
                   << std::max(0.0, visit.arrivalEnergy) << std::setw(10)
-                  << std::max(0.0, visit.departureEnergy) << "\n";
+                  << std::max(0.0, visit.departureEnergy) << std::setw(10)
+                  << (visit.chargerId > 0 ? std::to_string(visit.chargerId) : "-") << "\n";
     }
     std::cout << separator << "\n";
 }
@@ -189,7 +191,7 @@ void Solver::printRouteDiagnostic(const std::vector<int>& path, char vehicleType
 
 void Solver::saveResult() {
     std::ofstream file(std::filesystem::path(outputDirectory) / "result.csv");
-    file << "instance,status,hasSolution,objective,lowerBound,runtime,routeCount\n";
+    file << "instance,status,hasSolution,objective,lowerBound,runtime,routeCount,chargersPerStation\n";
     std::string status = stopped ? "STOPPED" : (timedOut ? "TIME_LIMIT" : "FINISHED");
     file << instanceName << "," << status << "," << (!bestRoutes.empty()) << ",";
     file << std::setprecision(15);
@@ -198,5 +200,5 @@ void Solver::saveResult() {
     file << ",";
     if (std::isfinite(lowerBound) && lowerBound > 0)
         file << lowerBound;
-    file << "," << runtime << "," << bestRoutes.size() << "\n";
+    file << "," << runtime << "," << bestRoutes.size() << "," << instance.chargersPerStation << "\n";
 }

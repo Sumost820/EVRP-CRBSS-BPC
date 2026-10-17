@@ -20,6 +20,7 @@ struct Instance {
     double chargeVehicleCost = 0;
     int swapVehicleCount = 10;
     int chargeVehicleCount = 10;
+    int chargersPerStation = 1; // 每个物理电站的同型充电桩数；换电设备固定为 1。
 
     double batteryCapacity = 0, loadCapacity = 0, consumptionRate = 0, inverseChargeRate = 0, speed = 0;
 
@@ -51,7 +52,7 @@ struct Instance {
 
     std::map<int, NodeMask> ngMasks;
 
-    Instance(const std::string& dataFile);
+    Instance(const std::string& dataFile, int chargersPerStation = 1);
 
 private:
     void readData(const std::string& dataFile);

@@ -16,6 +16,7 @@ struct ScheduledVisit {
     double departureTime = 0;
     double arrivalEnergy = 0;
     double departureEnergy = 0;
+    int chargerId = -1; // 充电访问使用站内 1-based 桩编号；其他节点为 -1。
 };
 
 struct ScheduleResult {

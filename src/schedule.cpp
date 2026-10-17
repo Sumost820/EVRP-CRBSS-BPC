@@ -1,5 +1,5 @@
 // 固定候选路线后联合检查全部车辆的补能安排，使用增量式分段线性充电。
-// 每个站点仍为一个充电桩和一个换电设备；Unknown 不作为不可行证明。
+// 每个物理站点为 n 个独立同型充电桩和一个换电设备；Unknown 不作为不可行证明。
 #include "schedule.h"
 #include "gurobi_c++.h"
 #include <algorithm>
@@ -29,6 +29,7 @@ double chargingTime(const Instance& instance, int node, double energy) {
 bool validateSchedule(const Instance& instance, const ScheduleResult& result) {
     struct Occupation {
         int node;
+        int chargerId;
         double start, finish;
     };
     std::vector<Occupation> occupations;
@@ -50,16 +51,19 @@ bool validateSchedule(const Instance& instance, const ScheduleResult& result) {
                 return false;
             double duration = instance.serviceTime[node];
             if (contains(instance.chargeStations, node)) {
+                if (visit.chargerId < 1 || visit.chargerId > instance.chargersPerStation)
+                    return false;
                 if (visit.departureEnergy < visit.arrivalEnergy - checkTolerance)
                     return false;
                 duration = chargingTime(instance, node, visit.departureEnergy) -
                            chargingTime(instance, node, visit.arrivalEnergy);
-                occupations.push_back({node, visit.startTime, visit.departureTime});
+                if (visit.departureTime - visit.startTime > checkTolerance)
+                    occupations.push_back({node, visit.chargerId, visit.startTime, visit.departureTime});
             } else if (contains(instance.swapStations, node)) {
                 duration = instance.swapTimes[node];
                 if (std::abs(visit.departureEnergy - instance.batteryCapacity) > checkTolerance)
                     return false;
-                occupations.push_back({node, visit.startTime, visit.departureTime});
+                occupations.push_back({node, -1, visit.startTime, visit.departureTime});
             } else {
                 if (std::abs(visit.departureEnergy - visit.arrivalEnergy) > checkTolerance ||
                     std::abs(visit.startTime - visit.arrivalTime) > checkTolerance)
@@ -83,7 +87,8 @@ bool validateSchedule(const Instance& instance, const ScheduleResult& result) {
             const auto& first = occupations[a];
             const auto& second = occupations[b];
 
-            if (first.node == second.node && first.start < second.finish - checkTolerance &&
+            if (first.node == second.node && first.chargerId == second.chargerId &&
+                first.start < second.finish - checkTolerance &&
                 second.start < first.finish - checkTolerance)
                 return false;
         }
@@ -101,6 +106,8 @@ ScheduleResult checkGlobalSchedule(
         return result;
     }
     try {
+        if (instance.chargersPerStation < 1)
+            throw std::invalid_argument("chargersPerStation must be a positive integer");
 
         std::set<int> selectedCustomers;
         for (const Route& route : routes) {
@@ -164,6 +171,7 @@ ScheduleResult checkGlobalSchedule(
         struct VisitVars {
             GRBVar arrival, arrivalEnergy;
             GRBLinExpr start, finish, departureEnergy;
+            std::vector<GRBVar> chargers;
         };
         std::vector<std::vector<VisitVars>> variables(routes.size());
         std::map<int, std::vector<std::pair<int, int>>> equipmentVisits;
@@ -247,6 +255,27 @@ ScheduleResult checkGlobalSchedule(
         }
         for (const auto& item : equipmentVisits) {
             const auto& visits = item.second;
+            const bool isCharge = contains(instance.chargeStations, item.first);
+            // At most one charger per visit is needed, even if n is very large.
+            const int chargerCount = isCharge
+                ? std::min(instance.chargersPerStation, static_cast<int>(visits.size())) : 0;
+            std::vector<GRBVar> active;
+            if (isCharge) {
+                for (size_t a = 0; a < visits.size(); ++a) {
+                    VisitVars& visit = variables[visits[a].first][visits[a].second];
+                    GRBLinExpr assigned = 0;
+                    for (int k = 0; k < chargerCount; ++k) {
+                        visit.chargers.push_back(model.addVar(0, 1, 0, GRB_BINARY));
+                        assigned += visit.chargers.back();
+                    }
+                    model.addConstr(assigned == 1);
+                    // A zero-duration visit consumes no equipment capacity.
+                    active.push_back(model.addVar(0, 1, 0, GRB_BINARY));
+                    model.addConstr(visit.finish - visit.start <= horizon * active.back());
+                }
+                // Identical chargers can be relabelled so the first visit uses charger 1.
+                model.addConstr(variables[visits[0].first][visits[0].second].chargers[0] == 1);
+            }
             for (size_t a = 0; a < visits.size(); ++a) {
                 for (size_t b = a + 1; b < visits.size(); ++b) {
                     const VisitVars& first = variables[visits[a].first][visits[a].second];
@@ -255,8 +284,18 @@ ScheduleResult checkGlobalSchedule(
                     if (visits[a].first == visits[b].first)
                         continue;
                     GRBVar order = model.addVar(0, 1, 0, GRB_BINARY);
-                    model.addGenConstrIndicator(order, 1, second.start - first.finish, GRB_GREATER_EQUAL, 0);
-                    model.addGenConstrIndicator(order, 0, first.start - second.finish, GRB_GREATER_EQUAL, 0);
+                    if (isCharge) {
+                        for (int k = 0; k < chargerCount; ++k) {
+                            GRBLinExpr inactive = 4 - first.chargers[k] - second.chargers[k]
+                                - active[a] - active[b];
+                            // All start/finish variables lie in [0, horizon], so M=horizon is valid.
+                            model.addConstr(second.start >= first.finish - horizon * (1 - order + inactive));
+                            model.addConstr(first.start >= second.finish - horizon * (order + inactive));
+                        }
+                    } else {
+                        model.addGenConstrIndicator(order, 1, second.start - first.finish, GRB_GREATER_EQUAL, 0);
+                        model.addGenConstrIndicator(order, 0, first.start - second.finish, GRB_GREATER_EQUAL, 0);
+                    }
                 }
             }
         }
@@ -277,6 +316,9 @@ ScheduleResult checkGlobalSchedule(
                     result.visits[r].push_back({routes[r].path[p], visit.arrival.get(GRB_DoubleAttr_X),
                         visit.start.getValue(), visit.finish.getValue(),
                         visit.arrivalEnergy.get(GRB_DoubleAttr_X), visit.departureEnergy.getValue()});
+                    for (size_t k = 0; k < visit.chargers.size(); ++k)
+                        if (visit.chargers[k].get(GRB_DoubleAttr_X) > 0.5)
+                            result.visits[r].back().chargerId = static_cast<int>(k) + 1;
                 }
             }
             if (validateSchedule(instance, result)) {

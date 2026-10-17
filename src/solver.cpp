@@ -7,8 +7,8 @@
 #include <iostream>
 #include <numeric>
 
-Solver::Solver(const std::string& dataFile, const std::string& resultDirectory)
-    : instance(dataFile), rmp(instance) {
+Solver::Solver(const std::string& dataFile, const std::string& resultDirectory, int chargersPerStation)
+    : instance(dataFile, chargersPerStation), rmp(instance) {
     outputDirectory = resultDirectory;
     startTime = std::chrono::high_resolution_clock::now();
     solveStartTime = startTime;

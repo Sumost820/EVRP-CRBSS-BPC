@@ -18,7 +18,7 @@ struct ColumnGenerationResult {
 class Solver {
 public:
     std::string instanceName;
-    Solver(const std::string& dataFile, const std::string& resultDirectory);
+    Solver(const std::string& dataFile, const std::string& resultDirectory, int chargersPerStation = 1);
     void solve();
     void printRouteDiagnostic(const std::vector<int>& path, char vehicleType);
     bool hasSolution() const { return !bestRoutes.empty(); }

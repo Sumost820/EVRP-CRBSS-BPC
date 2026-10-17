@@ -30,11 +30,14 @@ private:
     std::streambuf* file;
 };
 
-int runModel(const std::string& instancePath, double timeLimit, const std::string& outputDir) {
+int runModel(const std::string& instancePath, double timeLimit, const std::string& outputDir,
+    int chargersPerStation) {
     if (!std::filesystem::is_regular_file(instancePath))
         throw std::runtime_error("Instance file does not exist: " + instancePath);
     if (!std::isfinite(timeLimit) || timeLimit <= 0)
         throw std::runtime_error("timeLimit must be positive and finite");
+    if (chargersPerStation < 1)
+        throw std::invalid_argument("chargersPerStation must be a positive integer");
 
     std::filesystem::create_directories(outputDir);
     // Clear only this program's previous solution; the log is opened in overwrite mode.
@@ -51,7 +54,8 @@ int runModel(const std::string& instancePath, double timeLimit, const std::strin
     try {
         solveTimeLimit = timeLimit;
         std::cout << "Loading Instance: " << instancePath << "\n";
-        Solver solver(instancePath, outputDir);
+        std::cout << "Equipment per station: 1 swap device, " << chargersPerStation << " chargers\n";
+        Solver solver(instancePath, outputDir, chargersPerStation);
         solver.solve();
         exitCode = solver.hasStopped() ? 1 : (solver.hasSolution() ? 0 : 2);
     } catch (const GRBException& error) {

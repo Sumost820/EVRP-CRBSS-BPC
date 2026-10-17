@@ -4,6 +4,7 @@
 
 static Instance makeCase(const Instance& seed, int nodeCount, double horizon) {
     Instance instance = seed;
+    instance.chargersPerStation = 1;
     instance.nodeCount = nodeCount;
     instance.sourceDepot = 0; instance.sinkDepot = nodeCount - 1;
     instance.batteryCapacity = 10; instance.loadCapacity = 100; instance.consumptionRate = 1;
@@ -72,6 +73,74 @@ int main(int argc, char* argv[]) {
         parallel.distMatrix[1 * 8 + 6] = 10;
         Route otherCharge = {{0, 5, 1, 6, 7}, 'C', 0};
         expect(parallel, {charge, otherCharge}, ScheduleStatus::Infeasible, "one charger cannot serve two simultaneous charges");
+        parallel.chargersPerStation = 2;
+        auto twoChargers = expect(parallel, {charge, otherCharge}, ScheduleStatus::Feasible,
+            "two chargers serve two simultaneous charges");
+        require(twoChargers.visits[0][2].chargerId != twoChargers.visits[1][2].chargerId,
+            "Simultaneous positive charges must use different chargers");
+        Route otherSwap = {{0, 3, 2, 4, 7}, 'S', 0};
+        parallel.distMatrix[2 * 8 + 4] = 10;
+        expect(parallel, {swap, otherSwap}, ScheduleStatus::Infeasible,
+            "two chargers do not increase swap capacity");
+
+        Instance multi = makeCase(seed, 10, 3);
+        multi.chargeStations = {1}; multi.swapStations = {2}; multi.swapTimes[2] = 3;
+        multi.chargingFunctions[1] = EnergyFunction({{0, 0}, {5, 1}, {10, 3}}, 10);
+        multi.customers = {3, 4, 5, 6, 7, 8};
+        std::vector<Route> threeCharges;
+        for (int customer : {3, 5, 7}) {
+            multi.readyTime[customer] = multi.dueTime[customer] = 0;
+            multi.readyTime[customer + 1] = multi.dueTime[customer + 1] = 3;
+            multi.distMatrix[customer] = 10;
+            multi.distMatrix[1 * 10 + customer + 1] = 10;
+            threeCharges.push_back({{0, customer, 1, customer + 1, 9}, 'C', 0});
+        }
+        multi.chargersPerStation = 2;
+        expect(multi, threeCharges, ScheduleStatus::Infeasible, "two chargers cannot serve three simultaneous charges");
+        multi.chargersPerStation = 3;
+        expect(multi, threeCharges, ScheduleStatus::Feasible, "three chargers serve three simultaneous charges");
+        multi.chargersPerStation = 1000000;
+        expect(multi, threeCharges, ScheduleStatus::Feasible, "surplus chargers need no extra assignment variables");
+        multi.chargersPerStation = 2;
+        auto mixed = threeCharges;
+        mixed[2].path[2] = 2; mixed[2].vehicleType = 'S';
+        multi.distMatrix[2 * 10 + 8] = 10;
+        expect(multi, mixed, ScheduleStatus::Feasible, "two charges and one swap operate simultaneously");
+
+        // The same charger can be reused immediately when a charge ends.
+        Instance sequential = parallel;
+        sequential.chargersPerStation = 1;
+        sequential.dueTime.assign(8, 6);
+        sequential.readyTime[3] = sequential.dueTime[3] = 0;
+        sequential.readyTime[4] = sequential.dueTime[4] = 3;
+        sequential.readyTime[5] = sequential.dueTime[5] = 3;
+        sequential.readyTime[6] = sequential.dueTime[6] = 6;
+        expect(sequential, {charge, otherCharge}, ScheduleStatus::Feasible, "back-to-back charges reuse one charger");
+
+        Instance zero = parallel;
+        zero.chargersPerStation = 1;
+        zero.readyTime[5] = zero.dueTime[5] = 1;
+        zero.readyTime[6] = zero.dueTime[6] = 1;
+        zero.distMatrix[0 * 8 + 5] = zero.distMatrix[1 * 8 + 6] = 0;
+        expect(zero, {charge, otherCharge}, ScheduleStatus::Feasible,
+            "zero-duration charge inside another charge consumes no capacity");
+
+        Instance separate = parallel;
+        separate.chargersPerStation = 1;
+        separate.swapStations.clear(); separate.chargeStations = {1, 2};
+        separate.chargingFunctions[2] = separate.chargingFunctions.at(1);
+        Route remoteCharge = {{0, 5, 2, 6, 7}, 'C', 0};
+        expect(separate, {charge, remoteCharge}, ScheduleStatus::Feasible,
+            "charger capacity is independent at each station");
+
+        for (int invalid : {0, -1}) {
+            bool rejected = false;
+            try { Instance invalidInstance(argv[1], invalid); }
+            catch (const std::invalid_argument&) { rejected = true; }
+            require(rejected, "Instance must reject nonpositive charger counts");
+        }
+        multi.chargersPerStation = 0;
+        expect(multi, threeCharges, ScheduleStatus::Unknown, "invalid capacity is not an infeasibility proof");
 
         Instance partial = makeCase(seed, 4, 0.6);
         partial.chargeStations = {1}; partial.customers = {2};
@@ -90,7 +159,7 @@ int main(int argc, char* argv[]) {
         auto unknown = checkGlobalSchedule(repeated, {{{0, 1, 2, 1, 3}, 'S', 0}}, 0);
         require(unknown.status == ScheduleStatus::Unknown, "No time must return UNKNOWN, never INFEASIBLE");
         std::cout << "PASS: exhausted checking budget returns UNKNOWN\n";
-        std::cout << "All 10 scheduling regression checks passed.\n";
+        std::cout << "All scheduling regression checks passed.\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << "\n";

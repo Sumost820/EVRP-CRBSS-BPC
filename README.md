@@ -1,16 +1,22 @@
 # EVRP-CRBSS 分支定价工程
 
-从原 `Project5 - Final` 工程整理而来，保留原来的算例读取与缩放、初始列、双向标签、支配规则、ng-route/DSSR、缩减网络定价、割分离、弧分支和联合调度检查。当前仍采用每个物理电站一个充电桩、一个换电设备。
+从原 `Project5 - Final` 工程整理而来，保留原来的算例读取与缩放、初始列、双向标签、支配规则、ng-route/DSSR、缩减网络定价、割分离、弧分支和联合调度检查。每个物理电站包含一个换电设备和 `chargersPerStation` 个独立同型充电桩，默认桩数为 1。
 
 ## 在 CLion 中运行
 
 1. 打开本文件所在目录，使用 **Visual Studio** 工具链和 **Release** 配置。
 2. 重新加载 CMake，编译 `EVRP-CRBSS` 目标。
-3. 在 `src/main.cpp` 修改 `instancePath` 和 `timeLimit`，直接运行。默认算例为 `data/c101_21_25.txt`。
+3. 在 `src/main.cpp` 修改 `instancePath`、`timeLimit` 和 `chargersPerStation`，直接运行。默认算例为 `data/c103_21_25.txt`。
 
 `CMakeLists.txt` 中的 `GUROBI_HOME` 默认是 `D:/Gurobi/win64`，链接当前机器的 Gurobi 13。运行需要有效的 Gurobi 许可。项目不包含 Gurobi 安装包；编译时会将本机运行库复制到可执行文件旁。
 
-也可以向程序传入三个简单参数：算例路径、时限（秒）、结果文件夹。后两个参数可省略，`test.py` 使用这一入口。
+也可以向程序传入参数：算例路径、时限（秒）、结果文件夹、每站充电桩数。后三个参数可省略，旧调用方式仍兼容；桩数必须为正整数。例如每站 3 个充电桩：
+
+```text
+EVRP-CRBSS.exe data/c101_21_25.txt 3600 results/chargers_3/c101_21_25 3
+```
+
+所有物理站使用同一个桩数参数。增加桩数不改变单桩充电曲线，也不引入站级共享功率限制。仍保留每站一个充电模式节点、一个换电模式节点，由联合调度为每次充电分配具体桩号。同桩的正时长作业不能重叠，零时长充电不占设备；换电继续保持单设备互斥。主问题、定价及冲突割形式不变。比较不同桩数时需分别启动求解，不能复用旧容量下的不可行割。
 
 ## 批量测试
 
@@ -21,11 +27,11 @@ python -m pytest -s -v test.py
 python -m pytest -s -v test.py -k c101
 ```
 
-`test.py` 只有一个参数化函数 `testModel`，按顺序运行 `data` 下的所有 txt 文件。直接修改文件顶部的 `dataDir`、`exePath`、`timeLimit` 即可。默认可执行文件位于 `cmake-build-release-visual-studio/bin/EVRP-CRBSS.exe`；如果 CLion 使用其他构建目录，需要同步修改 `exePath`。
+`test.py` 只有一个参数化函数 `testModel`，按顺序运行 `data` 下的所有 txt 文件。直接修改文件顶部的 `dataDir`、`exePath`、`timeLimit` 和 `chargersPerStation` 即可，结果按桩数保存在 `results/chargers_n/算例名/`。默认可执行文件位于 `cmake-build-release-visual-studio/bin/EVRP-CRBSS.exe`；如果 CLion 使用其他构建目录，需要同步修改 `exePath`。
 
-批测默认每例 60 秒用于检查能否正常运行。有些算例在该时限内没有可行解，测试会如实失败；正式实验请增大 `timeLimit`。pytest 的外部超时比算法时限多 60 秒，用于避免进程异常阻塞。保留原算法的计时检查位置，因此时限不是强制精确到秒的停止点。
+批测默认每例 300 秒用于检查能否正常运行。有些算例在该时限内没有可行解，测试会如实失败；正式实验请增大 `timeLimit`。pytest 的外部超时比算法时限多 60 秒，用于避免进程异常阻塞。保留原算法的计时检查位置，因此时限不是强制精确到秒的停止点。
 
-`checks` 保留了原工程已有的 10 个调度检查用例，用于维护时回归核验。默认不编译；需要时设置 CMake 选项 `BUILD_CHECKS=ON`，编译后运行 CTest。
+`checks` 保留原工程已有的 10 个调度检查，并增加多桩并行、超容量、充换电独立、跨站独立、首尾相接、零时长和非法桩数检查。默认不编译；需要时设置 CMake 选项 `BUILD_CHECKS=ON`，编译后运行 CTest。
 
 ## 源代码分工
 
@@ -56,9 +62,9 @@ python -m pytest -s -v test.py -k c101
 
 每个算例写入 `results/算例名/`：
 
-- `solver.log`：求解过程和最终路线明细，仍采用原来的对齐表格和两位小数。
+- `solver.log`：求解过程和最终路线明细，使用对齐表格和两位小数，记录每站桩数及各充电访问的站内桩号（从 1 开始）。
 - `routes.csv`：当前最好可行解的车辆类型、成本和路线；未找到可行解时不生成。
-- `result.csv`：算例、停止状态、是否有可行解、目标值、原程序给出的下界、耗时和路线数。
+- `result.csv`：算例、停止状态、是否有可行解、目标值、原程序给出的下界、耗时、路线数和 `chargersPerStation`。
 
 重跑覆盖该算例的日志并移除上次的两份结果，防止把旧解误认为本次求解结果。不会建立 backup 文件夹。
 
